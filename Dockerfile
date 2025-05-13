@@ -4,7 +4,7 @@ FROM php:8.2-fpm
 # Set the working directory in the container
 WORKDIR /var/www/html
 
-# Install system dependencies
+# Install system dependencies including Apache
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -24,7 +24,9 @@ RUN apt-get update && apt-get install -y \
     npm \
     supervisor \
     sqlite3 \
-    cron
+    cron \
+    apache2 \
+    libapache2-mod-fcgid
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -77,13 +79,35 @@ RUN php artisan view:clear || true
 # Set up Laravel scheduler
 RUN echo "* * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1" | crontab -
 
+# Configure Apache to listen on port 3909
+RUN sed -i 's/Listen 80/Listen 3909/g' /etc/apache2/ports.conf
+
+# Configure Apache VirtualHost for port 3909
+RUN echo '<VirtualHost *:3909>\n\
+    DocumentRoot /var/www/html/public\n\
+    \n\
+    <Directory /var/www/html/public>\n\
+        AllowOverride All\n\
+        Require all granted\n\
+        Options Indexes FollowSymLinks\n\
+    </Directory>\n\
+    \n\
+    # Forward PHP requests to PHP-FPM\n\
+    <FilesMatch \\.php$>\n\
+        SetHandler "proxy:fcgi://127.0.0.1:9000"\n\
+    </FilesMatch>\n\
+    \n\
+    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
+    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Install NPM dependencies and build assets (if using Laravel Mix/Vite)
 RUN npm install && npm run build || true
 
-# Create supervisor configuration directly in the Dockerfile
+# Create supervisor configuration 
 RUN mkdir -p /etc/supervisor/conf.d/
 RUN echo "[supervisord]\n\
 nodaemon=true\n\
@@ -101,6 +125,16 @@ autostart=true\n\
 autorestart=true\n\
 priority=5\n\
 \n\
+[program:apache2]\n\
+command=/usr/sbin/apache2ctl -D FOREGROUND\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+autostart=true\n\
+autorestart=true\n\
+priority=10\n\
+\n\
 [program:laravel-queue]\n\
 process_name=%(program_name)s_%(process_num)02d\n\
 command=php /var/www/html/artisan queue:work --sleep=3 --tries=3\n\
@@ -116,8 +150,11 @@ RUN echo "memory_limit=512M" > /usr/local/etc/php/conf.d/memory-limit.ini \
     && echo "upload_max_filesize=100M" > /usr/local/etc/php/conf.d/upload-limit.ini \
     && echo "post_max_size=100M" >> /usr/local/etc/php/conf.d/upload-limit.ini
 
-# Expose port 9000 (PHP-FPM)
-EXPOSE 9000
+# Enable required Apache modules
+RUN a2enmod proxy_fcgi rewrite
+
+# Expose port 3909 (Apache)
+EXPOSE 3909
 
 # Define the command to run the Laravel application with supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
