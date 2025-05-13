@@ -69,22 +69,55 @@ COPY . .
 RUN composer dump-autoload --optimize
 
 # Configure Laravel
-RUN php artisan optimize:clear
-RUN php artisan config:clear
-RUN php artisan cache:clear
-RUN php artisan view:clear
+RUN php artisan optimize:clear || true
+RUN php artisan config:clear || true
+RUN php artisan cache:clear || true
+RUN php artisan view:clear || true
+
+# Set up Laravel scheduler
+RUN echo "* * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1" | crontab -
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Install NPM dependencies and build assets (if using Laravel Mix/Vite)
-RUN npm install && npm run build
+RUN npm install && npm run build || true
 
-# Copy supervisor configuration
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Create supervisor configuration directly in the Dockerfile
+RUN mkdir -p /etc/supervisor/conf.d/
+RUN echo "[supervisord]\n\
+nodaemon=true\n\
+user=root\n\
+logfile=/var/log/supervisor/supervisord.log\n\
+pidfile=/var/run/supervisord.pid\n\
+\n\
+[program:php-fpm]\n\
+command=php-fpm\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+autostart=true\n\
+autorestart=true\n\
+priority=5\n\
+\n\
+[program:laravel-queue]\n\
+process_name=%(program_name)s_%(process_num)02d\n\
+command=php /var/www/html/artisan queue:work --sleep=3 --tries=3\n\
+autostart=true\n\
+autorestart=true\n\
+user=www-data\n\
+numprocs=2\n\
+redirect_stderr=true\n\
+stdout_logfile=/var/www/html/storage/logs/queue.log" > /etc/supervisor/conf.d/supervisord.conf
+
+# Increase PHP memory limit and other settings
+RUN echo "memory_limit=512M" > /usr/local/etc/php/conf.d/memory-limit.ini \
+    && echo "upload_max_filesize=100M" > /usr/local/etc/php/conf.d/upload-limit.ini \
+    && echo "post_max_size=100M" >> /usr/local/etc/php/conf.d/upload-limit.ini
 
 # Expose port 9000 (PHP-FPM)
 EXPOSE 9000
 
-# Define the command to run the Laravel application
-CMD ["php-fpm"]
+# Define the command to run the Laravel application with supervisor
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
