@@ -60,3 +60,4 @@ CMD ["/var/www/html/laravelVanila-demo/start.sh"]
 
 # Expose ports
 EXPOSE 80 3306
+
