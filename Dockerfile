@@ -35,7 +35,6 @@ RUN add-apt-repository ppa:ondrej/php -y && apt-get update && apt-get install -y
 # Install Composer globally
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --ignore-platform-req=ext-pdo_sqlite
 
-root@instance-20250514-112525docker:~/laravel# cat Dockerfile 
 # Base image
 FROM ubuntu:latest
 
