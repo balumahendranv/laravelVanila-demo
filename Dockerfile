@@ -35,44 +35,6 @@ RUN add-apt-repository ppa:ondrej/php -y && apt-get update && apt-get install -y
 # Install Composer globally
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --ignore-platform-req=ext-pdo_sqlite
 
-root@instance-20250514-112525docker:~/laravel# cat  Dockerfile 
-# Base image
-FROM ubuntu:latest
-
-# Prevent interactive prompts during build
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Update and install system packages
-RUN apt-get update && apt-get install -y \
-    apache2 \
-    mysql-server \
-    git \
-    unzip \
-    curl \
-    vim \
-    software-properties-common \
-    lsb-release \
-    gnupg2 \
-    ca-certificates
-
-# Add PHP 8.3 repository and install PHP + needed extensions
-RUN add-apt-repository ppa:ondrej/php -y && apt-get update && apt-get install -y \
-    php8.3 \
-    php8.3-cli \
-    php8.3-common \
-    php8.3-mysql \
-    php8.3-xml \
-    php8.3-mbstring \
-    php8.3-curl \
-    php8.3-zip \
-    php8.3-bcmath \
-    php8.3-intl \
-    php8.3-sqlite3 \
-    libapache2-mod-php8.3
-
-# Install Composer globally
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --ignore-platform-req=ext-pdo_sqlite
-
 # Set working directory
 WORKDIR /var/www/html
 
