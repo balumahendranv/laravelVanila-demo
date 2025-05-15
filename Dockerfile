@@ -1,160 +1,109 @@
-# Use an official PHP image as a parent image
-FROM php:8.2-fpm
+# Base image
+FROM ubuntu:latest
 
-# Set the working directory in the container
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install system packages
+RUN apt-get update && apt-get install -y \
+    apache2 \
+    mysql-server \
+    git \
+    unzip \
+    curl \
+    vim \
+    software-properties-common \
+    lsb-release \
+    gnupg2 \
+    ca-certificates
+
+# Add PHP 8.3 repository and install PHP + needed extensions
+RUN add-apt-repository ppa:ondrej/php -y && apt-get update && apt-get install -y \
+    php8.3 \
+    php8.3-cli \
+    php8.3-common \
+    php8.3-mysql \
+    php8.3-xml \
+    php8.3-mbstring \
+    php8.3-curl \
+    php8.3-zip \
+    php8.3-bcmath \
+    php8.3-intl \
+    php8.3-sqlite3 \
+    libapache2-mod-php8.3
+
+# Install Composer globally
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --ignore-platform-req=ext-pdo_sqlite
+
+root@instance-20250514-112525docker:~/laravel# cat Dockerfile 
+# Base image
+FROM ubuntu:latest
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install system packages
+RUN apt-get update && apt-get install -y \
+    apache2 \
+    mysql-server \
+    git \
+    unzip \
+    curl \
+    vim \
+    software-properties-common \
+    lsb-release \
+    gnupg2 \
+    ca-certificates
+
+# Add PHP 8.3 repository and install PHP + needed extensions
+RUN add-apt-repository ppa:ondrej/php -y && apt-get update && apt-get install -y \
+    php8.3 \
+    php8.3-cli \
+    php8.3-common \
+    php8.3-mysql \
+    php8.3-xml \
+    php8.3-mbstring \
+    php8.3-curl \
+    php8.3-zip \
+    php8.3-bcmath \
+    php8.3-intl \
+    php8.3-sqlite3 \
+    libapache2-mod-php8.3
+
+# Install Composer globally
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --ignore-platform-req=ext-pdo_sqlite
+
+# Set working directory
 WORKDIR /var/www/html
 
-# Install system dependencies including Apache
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    libzip-dev \
-    libicu-dev \
-    libfreetype6-dev \
-    libjpeg62-turbo-dev \
-    libmcrypt-dev \
-    libpq-dev \
-    libsodium-dev \
-    zip \
-    unzip \
-    nodejs \
-    npm \
-    supervisor \
-    sqlite3 \
-    cron \
-    apache2 \
-    libapache2-mod-fcgid
+# Clone Laravel project
+RUN git clone https://github.com/balumahendranv/laravelVanila-demo.git
 
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+WORKDIR /var/www/html/laravelVanila-demo
 
-# Install PHP extensions
-RUN docker-php-ext-install \
-    pdo \
-    pdo_mysql \
-    pdo_pgsql \
-    mysqli \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    intl \
-    opcache \
-    soap \
-    sockets \
-    xml \
-    zip
+# Copy env file and install dependencies
+RUN cp .env.example .env \
+    && composer install --no-interaction --prefer-dist \
+    && php artisan key:generate
 
-# Configure and install GD
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd
-    
-# Install Redis extension
-RUN pecl install redis && docker-php-ext-enable redis
+# Set permissions for Laravel
+RUN chmod -R 777 storage bootstrap/cache
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Expose Apache and MySQL ports
+EXPOSE 80 3306
 
-# Copy composer.json and composer.lock to the container
-COPY composer*.json ./
+# Enable Apache mod_rewrite
+RUN a2enmod rewrite
 
-# Install Laravel dependencies
-RUN composer install --no-scripts --no-autoloader
+# Configure Apache site
+COPY apache-vhost.conf /etc/apache2/sites-available/000-default.conf
 
-# Copy the rest of the application files to the container
-COPY . .
+# Create MySQL socket directory
+RUN mkdir -p /var/run/mysqld && chown mysql:mysql /var/run/mysqld
 
-# Generate optimized autoload files
-RUN composer dump-autoload --optimize
+# Copy custom startup script into the container
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-# Configure Laravel
-RUN php artisan optimize:clear || true
-RUN php artisan config:clear || true
-RUN php artisan cache:clear || true
-RUN php artisan view:clear || true
-
-# Set up Laravel scheduler
-RUN echo "* * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1" | crontab -
-
-# Configure Apache to listen on port 3909
-RUN sed -i 's/Listen 80/Listen 3909/g' /etc/apache2/ports.conf
-
-# Configure Apache VirtualHost for port 3909
-RUN echo '<VirtualHost *:3909>\n\
-    DocumentRoot /var/www/html/public\n\
-    \n\
-    <Directory /var/www/html/public>\n\
-        AllowOverride All\n\
-        Require all granted\n\
-        Options Indexes FollowSymLinks\n\
-    </Directory>\n\
-    \n\
-    # Forward PHP requests to PHP-FPM\n\
-    <FilesMatch \\.php$>\n\
-        SetHandler "proxy:fcgi://127.0.0.1:9000"\n\
-    </FilesMatch>\n\
-    \n\
-    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
-    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
-</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
-
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-
-# Install NPM dependencies and build assets (if using Laravel Mix/Vite)
-RUN npm install && npm run build || true
-
-# Create supervisor configuration 
-RUN mkdir -p /etc/supervisor/conf.d/
-RUN echo "[supervisord]\n\
-nodaemon=true\n\
-user=root\n\
-logfile=/var/log/supervisor/supervisord.log\n\
-pidfile=/var/run/supervisord.pid\n\
-\n\
-[program:php-fpm]\n\
-command=php-fpm\n\
-stdout_logfile=/dev/stdout\n\
-stdout_logfile_maxbytes=0\n\
-stderr_logfile=/dev/stderr\n\
-stderr_logfile_maxbytes=0\n\
-autostart=true\n\
-autorestart=true\n\
-priority=5\n\
-\n\
-[program:apache2]\n\
-command=/usr/sbin/apache2ctl -D FOREGROUND\n\
-stdout_logfile=/dev/stdout\n\
-stdout_logfile_maxbytes=0\n\
-stderr_logfile=/dev/stderr\n\
-stderr_logfile_maxbytes=0\n\
-autostart=true\n\
-autorestart=true\n\
-priority=10\n\
-\n\
-[program:laravel-queue]\n\
-process_name=%(program_name)s_%(process_num)02d\n\
-command=php /var/www/html/artisan queue:work --sleep=3 --tries=3\n\
-autostart=true\n\
-autorestart=true\n\
-user=www-data\n\
-numprocs=2\n\
-redirect_stderr=true\n\
-stdout_logfile=/var/www/html/storage/logs/queue.log" > /etc/supervisor/conf.d/supervisord.conf
-
-# Increase PHP memory limit and other settings
-RUN echo "memory_limit=512M" > /usr/local/etc/php/conf.d/memory-limit.ini \
-    && echo "upload_max_filesize=100M" > /usr/local/etc/php/conf.d/upload-limit.ini \
-    && echo "post_max_size=100M" >> /usr/local/etc/php/conf.d/upload-limit.ini
-
-# Enable required Apache modules
-RUN a2enmod proxy_fcgi rewrite
-
-# Expose port 3909 (Apache)
-EXPOSE 3909
-
-# Define the command to run the Laravel application with supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Set entrypoint
+CMD ["/start.sh"]
