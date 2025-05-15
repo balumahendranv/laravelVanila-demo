@@ -59,8 +59,5 @@ RUN chmod +x start.sh
 CMD ["/var/www/html/laravelVanila-demo/start.sh"]
 
 # Expose ports
-<<<<<<< HEAD
 EXPOSE 80 3306
-=======
-EXPOSE 80 3306
->>>>>>> 0da2a5ef7f5055e1d9b72a211ae4da14122ca85c
+
