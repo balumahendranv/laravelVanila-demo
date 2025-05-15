@@ -47,6 +47,8 @@ WORKDIR /var/www/html/laravelVanila-demo
 RUN cp .env.example .env \
     && composer install --no-interaction --prefer-dist \
     && php artisan key:generate
+    && chmod -R 775 storage bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
 
 # Set permissions for Laravel
 RUN chmod -R 777 storage bootstrap/cache
