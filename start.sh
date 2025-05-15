@@ -1,8 +1,19 @@
 #!/bin/bash
 
-# Start MySQL service
-echo "Starting MySQL service..."
+chown -R www-data:www-data /var/www/html/laravelVanila-demo/storage /var/www/html/laravelVanila-demo/bootstrap/cache
+chmod -R 775 /var/www/html/laravelVanila-demo/storage /var/www/html/laravelVanila-demo/bootstrap/cache
+
+# Start MySQL and fix root login (optional — use with caution)
 service mysql start
+
+# Optional: fix root auth if needed every time (not ideal for prod)
+mysql -u root <<EOF
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'P05tiefs@79';
+FLUSH PRIVILEGES;
+EOF
+# Start MySQL service
+#echo "Starting MySQL service..."
+#service mysql start
 
 # Wait for MySQL to start
 until mysqladmin ping --silent; do
@@ -28,7 +39,7 @@ sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env
 sed -i 's/^DB_PORT=.*/DB_PORT=3306/' .env
 sed -i 's/^DB_DATABASE=.*/DB_DATABASE=laravel/' .env
 sed -i 's/^DB_USERNAME=.*/DB_USERNAME=root/' .env
-sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=/' .env
+sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=P05tiefs@79/' .env
 
 # Clear Laravel configuration cache
 echo "Clearing Laravel config cache..."
