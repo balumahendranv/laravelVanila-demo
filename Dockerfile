@@ -68,4 +68,4 @@ COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 # Set entrypoint
-CMD ["/start.sh"
+CMD ["/start.sh"]
