@@ -46,7 +46,7 @@ WORKDIR /var/www/html/laravelVanila-demo
 # Copy env file and install dependencies
 RUN cp .env.example .env \
     && composer install --no-interaction --prefer-dist \
-    && php artisan key:generate
+    && php artisan key:generate \
     && chmod -R 775 storage bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
