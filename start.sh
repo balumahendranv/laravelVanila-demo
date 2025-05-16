@@ -2,7 +2,7 @@
 
 # Start MySQL service
 #echo "Starting MySQL service..."
-#service mysql start
+service mysql start
 
 # Wait for MySQL to start
 until mysqladmin ping --silent; do
